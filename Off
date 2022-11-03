@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# get subnet
+subnet=`ip a | grep “inet “ | tail -1 | awk ‘{print $2}’`
+
+# get router/gateway
+router=`ip route show | head -1 | awk ‘{print $3}’`
+
+# get size of network portion of address in bytes
+sz=`echo $subnet | awk -F / ‘{print $2}’`
+bytes=`expr $sz / 8`
+prefix=`echo $subnet | cut -d. -f1-$bytes`      # e.g., 192.168.0
+
+# get IP address to be set
+IP=`hostname -I | awk ‘{print $1}’`             # current IP
+echo -n “Keep IP address?—$IP [yn]> “
+read ans
+if [ $ans =="n" ]; then
+  echo -n “Enter new IP address: “
+  read IP
+  # check if specified IP is properly formatted
+  if [[ ! $IP =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+    echo Invalid IP
+  fi
+  # check if specified IP works for local network
+  if [[ ! $IP =~ ^$prefix ]]; then
+    echo “ERROR: Specified IP not usable for local network”
+    exit
+  fi
+fi
+
+# check if specified IP is properly formatted
+if [[ ! $IP =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+  echo Invalid IP
+fi
+
+# fetch the UUID
+UUID=`nmcli connection show | tail -1 | awk ‘{print $4}’`
+# UUID=`nmcli connection show | head -2 | tail -1 | awk ‘{print $3}’` # Mint
+
+# run commands to set up the permanent IP address
+sudo nmcli connection modify $UUID IPv4.address $IP/$sz
+sudo nmcli connection modify $UUID IPv4.gateway $router
+sudo nmcli connection modify $UUID IPv4.method manual
+sudo nmcli connection up $UUID
